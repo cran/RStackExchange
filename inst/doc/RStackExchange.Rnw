@@ -1,0 +1,204 @@
+\documentclass[letter]{article}
+%\VignetteIndexEntry{StackExchange client for R}
+%\VignettePackage{RStackExchange}
+%\VignetteKeywords{Documentation}
+\usepackage{url}
+\newcommand{\Rfunction}[1]{{\texttt{#1}}}
+\newcommand{\Robject}[1]{{\texttt{#1}}}
+\newcommand{\Rpackage}[1]{{\textit{#1}}}
+\newcommand{\Rmethod}[1]{{\texttt{#1}}}
+\newcommand{\Rfunarg}[1]{{\texttt{#1}}}
+\newcommand{\Rclass}[1]{{\textit{#1}}}
+
+\begin{document}
+
+\title{StackExchange client for R}
+\author{Jeff Gentry}
+\maketitle
+
+\section{Introduction}
+
+The StackExchange web site family is an extremely rapidly growing collection 
+of question and answer websites.  The earliest examples focused on software 
+development, system administration and the like but now topics are very far 
+ranging.  The way they work is that people can vote questions up or down 
+based on how good of a question they think it is, as well as the answers 
+given.  If one believes in the wisdom of the crowds, this should lead to the 
+best answers to the best questions floating to the top. 
+
+\section{Initial Notes}
+
+\subsection{Notes for this version}
+
+This package is still very much a work in progress, the edges are still
+quite rough.  If a particular rough edge interests you and you'd like
+it smoothed out sooner rather than later, please contact me.
+
+\subsection{Notes on API coverage}
+
+The ultimate goal is to provide full coverage of the StackExchange API, 
+although this is not currently the case.  Aspects of the API will be added 
+over time, although if there are particular places that you find missing,
+please contact me.
+
+\subsection{Notes for this document}
+
+This document is just attempting to point you in the right direction, and
+is not providing an encyclopedic overview of the \Rpackage{RStackExchange}
+package nor the StackExchange API.  Refer to the individual man pages for
+the package to see a complete overview of functionality.  For more complete 
+documentation of the StackExchange API see 
+\url{http://api.stackoverflow.com/1.0/usage}.
+
+\section{Managing multiple StackExchange sites}
+
+Any valid StackExchange site will work with this package.  All functions take
+a \Rfunarg{site} argument, which defaults to \Robject{stackoverflow.com}. 
+You may override this default by supplying the domain
+name (NOT the full URL) for the StackExchange site that you wish to use. A 
+complete list of StackExchange sites is available at 
+\url{http://stackexchange.com/sites}.
+
+\section{API Keys}
+
+By default, access to the StackExchange API is considered to be more of a trial
+basis affair, and a particular IP address can only make 300 requests per day
+in that manner.  Considering that a large query could result in dozens of
+API requests, this limit won't take you very far.  There's a solution to this
+problem, obtaining a StackExchange API Key.  To do this, you will create a
+dummy application at \url{http://stackapps.com/apps/register}, and at the
+end you'll be given an API Key.  By using this key, you can up your limit
+to be 10,000 requests per day.  To enable the key in your R session, do
+the following, where \Robject{key} is what was given to you:
+
+<<APIKEY,eval=FALSE>>=
+registerAPIKey(key)
+@ 
+
+
+\section{You've got questions?  We've got answers}
+
+There are multiple methods for searching questions.  To explain the upcoming 
+nomenclature, consider the following definitions.  An {\em unanswered} 
+question is one where there are no answers provided which have been upvoted.
+Contrast that with a {\em no answer} question, which literally has no 
+answers provided.  One can also look for {\em related} questions, which
+use a private algorithm to identify similar questions as well as 
+{\em linked} questions which are questions which have been linked to
+in other questions.
+
+<<questions>>=
+   library(RStackExchange)
+   allQs <- getQuestions(tagged='r', fromDate=as.POSIXct('2010-10-01'),
+                         toDate=as.POSIXct('2011-01-01'), num=5)
+   allQs
+   noAQs <- getNoAnswerQuestions(tagged='r', fromDate=as.POSIXct('2010-10-01'),
+                                 toDate=as.POSIXct('2011-01-01'), num=5)
+   noAQs
+@ 
+
+These questions are all instances of the \Rclass{seQuestion} class,
+which provides the \Rclass{answers} field already included.  We can
+see the number of answers each provides:
+
+<<answers>>=
+  aQAnswers <- sapply(allQs, function(x) x$getAnswers())
+  nAQAnswers <- sapply(noAQs, function(x) x$getAnswers())
+ 
+  length(aQAnswers)
+  length(nAQAnswers)
+@ 
+
+One can also see the comments for either a question or an answer:
+
+<<comments>>=
+  allQs[[1]]$getComments()
+
+  allComments <- sapply(allQs, function(x) x$getComments())
+  allComments[[1]]
+@ 
+
+\section{Users}
+
+At the moment, finding users is a task that's split between two
+functions.  The \Rfunction{searchusers} function is intended for cases where
+one does not know the specific users, while \Rfunction{getUsers} will
+return users specified by their user IDs.  
+
+In general, there should be little use for \Rfunction{getUsers}, as
+most situations where one will have actual user IDs (e.g. the asker of
+a question), the \Rclass{seUser} object will already be attached to
+that object (using the same example, the \Rclass{seQuestion} object).
+
+In this example, we'll find the 15 oldest users with the word 'java'
+as part of their name, and then identify which one has the highest reputation.
+
+<<searchUsers>>=
+   users <- searchUsers(num=15, filter='java', sort='creation', order='asc')
+   reps <- sapply(users, function(x) x$getReputation())
+   maxRepUser <- users[[which.max(reps)]]
+   maxRepUser$getDisplayName()
+@ 
+
+\section{Tags}
+
+Tags are a method of aggregating content by topic.  A question may
+have any number of tags applied to it, which allows the question to
+not have to live under one single organizational layer.  For example,
+a question might be tagged as pertaining to {\em R} as well as 
+{\em time-series}.  
+
+Tags are not as richly supported by the StackExchange API, but one can
+still manipulate them a bit.  For instance, we can see who the top
+question askers are for the {\em javascript} tag:
+
+<<Javascript>>=
+   tag <- getTags(num=1, filter='javascript')[[1]]
+   tag$topAskers('month', num=5)
+@ 
+
+Or given a user, we can see what tags they like to work with, first
+looking at the top 5 tags that they tend to answer questions about as
+well as ask questions about.
+
+<<userTags>>=
+   ansTags <- maxRepUser$topTagsByAnswers(num=5)
+   ansTags
+   quesTags <- maxRepUser$topTagsByQuestions(num=5)
+   quesTags
+@ 
+
+Similarly, given a particular tag (or vector of tags), we can see what the top rated
+questions or answers are for that user.
+
+<<userTags2>>=
+   maxRepUser$topAnswersByTags(ansTags[[1]]$getName(), num=3)
+   maxRepUser$topQuestionsByTags(quesTags[[1]]$getName(), num=2) 
+@
+
+
+\section{Badges}
+
+Badges are a current trend in websites which theoretically gives users
+more motivation to participate, using a system of video game like
+rewards.  We can get a list of the badges available on a given
+StackExchange site, and see what users have been awarded this badge,
+for example:
+
+<<badges>>=
+   badges <- allBadges(num=300, site='programmers.stackexchange.com')
+   badgeRecipients(badges[[25]]$getBadgeID(), num=5)
+@ 
+
+
+\section{Session Information}
+
+The version number of R and packages loaded for generating the vignette were:
+
+\begin{verbatim}
+<<echo=FALSE,results=tex>>=
+sessionInfo()
+@
+\end{verbatim}
+
+\end{document}
